@@ -44,12 +44,12 @@ import { StatusBadge } from "../components/StatusBadge";
 import {
   useCreateRequest,
   usePatients,
-  useProfile,
   useRequests,
   useUpdateRequest,
 } from "../hooks/useQueries";
+import { getStoredRole } from "../utils/auth";
 import { ALL_BLOOD_GROUPS, BG_DISPLAY } from "../utils/blood";
-import { formatDate, generateId, nowNs } from "../utils/time";
+import { formatDate, nowNs } from "../utils/time";
 
 const REQUEST_STATUSES = ["pending", "approved", "fulfilled", "rejected"];
 
@@ -64,9 +64,8 @@ const EMPTY_REQUEST: BloodRequest = {
 };
 
 export function RequestsPage() {
-  const { data: requests = [], isLoading } = useRequests();
-  const { data: patients = [] } = usePatients();
-  const { data: profile } = useProfile();
+  const { data: requestRows = [], isLoading } = useRequests();
+  const { data: patientRows = [] } = usePatients();
   const createRequest = useCreateRequest();
   const updateRequest = useUpdateRequest();
 
@@ -75,25 +74,21 @@ export function RequestsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState<BloodRequest>({ ...EMPTY_REQUEST });
 
-  // Patient name map
-  const patientMap = new Map<number, string>();
-  patients.forEach((p, idx) => patientMap.set(idx, p.name));
+  const patientMap = new Map<string, string>();
+  for (const [id, p] of patientRows) patientMap.set(String(id), p.name);
 
-  const filtered = requests.filter((r) => {
+  const filtered = requestRows.filter(([, r]) => {
     const matchStatus = statusFilter === "all" || r.status === statusFilter;
     const matchBg = bgFilter === "all" || r.bloodGroup === bgFilter;
     return matchStatus && matchBg;
   });
 
-  const set = (k: keyof BloodRequest, v: any) =>
+  const set = (k: keyof BloodRequest, v: unknown) =>
     setForm((p) => ({ ...p, [k]: v }));
 
   const handleAdd = async () => {
     try {
-      await createRequest.mutateAsync({
-        request: { ...form, requestedTimestamp: nowNs() },
-        id: generateId(),
-      });
+      await createRequest.mutateAsync({ ...form, requestedTimestamp: nowNs() });
       toast.success("Blood request submitted.");
       setAddOpen(false);
       setForm({ ...EMPTY_REQUEST });
@@ -103,17 +98,17 @@ export function RequestsPage() {
   };
 
   const handleStatusChange = async (
-    idx: number,
+    id: bigint,
     request: BloodRequest,
     newStatus: string,
   ) => {
     try {
       await updateRequest.mutateAsync({
-        id: BigInt(idx),
+        id,
         request: {
           ...request,
           status: newStatus,
-          handledBy: profile?.name ?? "",
+          handledBy: getStoredRole() ?? "",
         },
       });
       toast.success(`Request marked as ${newStatus}.`);
@@ -122,7 +117,9 @@ export function RequestsPage() {
     }
   };
 
-  const pendingCount = requests.filter((r) => r.status === "pending").length;
+  const pendingCount = requestRows.filter(
+    ([, r]) => r.status === "pending",
+  ).length;
 
   return (
     <AppLayout pageTitle="Blood Requests">
@@ -140,7 +137,6 @@ export function RequestsPage() {
           </Button>
         }
       />
-
       <Card className="shadow-card mb-4">
         <CardContent className="p-4 flex flex-wrap gap-3">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -159,7 +155,10 @@ export function RequestsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={bgFilter} onValueChange={(v) => setBgFilter(v as any)}>
+          <Select
+            value={bgFilter}
+            onValueChange={(v) => setBgFilter(v as BloodGroup | "all")}
+          >
             <SelectTrigger
               className="w-40"
               data-ocid="request.filter.bg.select"
@@ -181,7 +180,6 @@ export function RequestsPage() {
           </p>
         </CardContent>
       </Card>
-
       <Card className="shadow-card">
         <CardContent className="p-0">
           {isLoading ? (
@@ -223,18 +221,18 @@ export function RequestsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((r, idx) => (
+                {filtered.map(([id, r]) => (
                   <TableRow
-                    key={r.requestedTimestamp + String(idx)}
+                    key={String(id)}
                     className={
                       r.status === "pending"
                         ? "bg-warning/5 border-l-2 border-l-warning"
                         : ""
                     }
-                    data-ocid={`request.item.${idx + 1}`}
+                    data-ocid={`request.item.${String(id)}`}
                   >
                     <TableCell className="font-medium">
-                      {patientMap.get(Number(r.patientId)) ??
+                      {patientMap.get(String(r.patientId)) ??
                         `Patient #${Number(r.patientId)}`}
                     </TableCell>
                     <TableCell>
@@ -262,9 +260,9 @@ export function RequestsPage() {
                               size="icon"
                               className="w-7 h-7 text-success-foreground hover:bg-success/10"
                               onClick={() =>
-                                handleStatusChange(idx, r, "approved")
+                                handleStatusChange(id, r, "approved")
                               }
-                              data-ocid={`request.approve_button.${idx + 1}`}
+                              data-ocid={`request.approve_button.${String(id)}`}
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
                             </Button>
@@ -273,9 +271,9 @@ export function RequestsPage() {
                               size="icon"
                               className="w-7 h-7 text-destructive hover:bg-destructive/10"
                               onClick={() =>
-                                handleStatusChange(idx, r, "rejected")
+                                handleStatusChange(id, r, "rejected")
                               }
-                              data-ocid={`request.reject_button.${idx + 1}`}
+                              data-ocid={`request.reject_button.${String(id)}`}
                             >
                               <XCircle className="w-3.5 h-3.5" />
                             </Button>
@@ -287,9 +285,9 @@ export function RequestsPage() {
                             size="icon"
                             className="w-7 h-7 text-info-foreground hover:bg-info/10"
                             onClick={() =>
-                              handleStatusChange(idx, r, "fulfilled")
+                              handleStatusChange(id, r, "fulfilled")
                             }
-                            data-ocid={`request.fulfill_button.${idx + 1}`}
+                            data-ocid={`request.fulfill_button.${String(id)}`}
                           >
                             <Truck className="w-3.5 h-3.5" />
                           </Button>
@@ -303,8 +301,6 @@ export function RequestsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Add Request Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent data-ocid="request.add.dialog">
           <DialogHeader>
@@ -321,8 +317,8 @@ export function RequestsPage() {
                   <SelectValue placeholder="Select patient" />
                 </SelectTrigger>
                 <SelectContent>
-                  {patients.map((p, idx) => (
-                    <SelectItem key={p.name + String(idx)} value={String(idx)}>
+                  {patientRows.map(([id, p]) => (
+                    <SelectItem key={String(id)} value={String(id)}>
                       {p.name}
                     </SelectItem>
                   ))}

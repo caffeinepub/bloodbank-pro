@@ -6,11 +6,9 @@ import type {
   Donor,
   InventoryUnit,
   Patient,
-  UserProfile,
 } from "../backend";
 import { useActor } from "./useActor";
 
-// ─── Query keys ───────────────────────────────────────────────────────────────
 export const QK = {
   dashboard: ["dashboard"],
   donors: ["donors"],
@@ -18,8 +16,6 @@ export const QK = {
   inventory: ["inventory"],
   patients: ["patients"],
   requests: ["requests"],
-  profile: ["profile"],
-  isAdmin: ["isAdmin"],
 } as const;
 
 function useEnabled() {
@@ -27,50 +23,20 @@ function useEnabled() {
   return { actor, enabled: !!actor && !isFetching };
 }
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
 export function useDashboard() {
   const { actor, enabled } = useEnabled();
   return useQuery({
     queryKey: QK.dashboard,
-    queryFn: async () => actor!.getDashboardSummary(),
+    queryFn: () => actor!.getDashboardSummary(),
     enabled,
   });
 }
 
-// ─── Profile ──────────────────────────────────────────────────────────────────
-export function useProfile() {
-  const { actor, enabled } = useEnabled();
-  return useQuery({
-    queryKey: QK.profile,
-    queryFn: async () => actor!.getCallerUserProfile(),
-    enabled,
-  });
-}
-
-export function useIsAdmin() {
-  const { actor, enabled } = useEnabled();
-  return useQuery({
-    queryKey: QK.isAdmin,
-    queryFn: async () => actor!.isCallerAdmin(),
-    enabled,
-  });
-}
-
-export function useSaveProfile() {
-  const { actor } = useActor();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (profile: UserProfile) => actor!.saveCallerUserProfile(profile),
-    onSuccess: () => qc.invalidateQueries({ queryKey: QK.profile }),
-  });
-}
-
-// ─── Donors ───────────────────────────────────────────────────────────────────
 export function useDonors() {
   const { actor, enabled } = useEnabled();
   return useQuery({
     queryKey: QK.donors,
-    queryFn: async () => actor!.getAllDonors(),
+    queryFn: () => actor!.getAllDonors(),
     enabled,
   });
 }
@@ -79,8 +45,7 @@ export function useCreateDonor() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ donor, id }: { donor: Donor; id: bigint }) =>
-      actor!.createDonor(donor, id),
+    mutationFn: (donor: Donor) => actor!.createDonor(donor),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.donors });
       qc.invalidateQueries({ queryKey: QK.dashboard });
@@ -110,12 +75,11 @@ export function useDeleteDonor() {
   });
 }
 
-// ─── Collections ──────────────────────────────────────────────────────────────
 export function useCollections() {
   const { actor, enabled } = useEnabled();
   return useQuery({
     queryKey: QK.collections,
-    queryFn: async () => actor!.getAllCollections(),
+    queryFn: () => actor!.getAllCollections(),
     enabled,
   });
 }
@@ -124,8 +88,7 @@ export function useCreateCollection() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ collection, id }: { collection: Donation; id: bigint }) =>
-      actor!.createCollection(collection, id),
+    mutationFn: (collection: Donation) => actor!.createCollection(collection),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.collections }),
   });
 }
@@ -140,12 +103,20 @@ export function useUpdateCollection() {
   });
 }
 
-// ─── Inventory ────────────────────────────────────────────────────────────────
+export function useDeleteCollection() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => actor!.deleteCollection(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.collections }),
+  });
+}
+
 export function useInventory() {
   const { actor, enabled } = useEnabled();
   return useQuery({
     queryKey: QK.inventory,
-    queryFn: async () => actor!.getAllInventory(),
+    queryFn: () => actor!.getAllInventory(),
     enabled,
   });
 }
@@ -154,8 +125,7 @@ export function useCreateInventory() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ unit, id }: { unit: InventoryUnit; id: bigint }) =>
-      actor!.createInventoryUnit(unit, id),
+    mutationFn: (unit: InventoryUnit) => actor!.createInventoryUnit(unit),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.inventory });
       qc.invalidateQueries({ queryKey: QK.dashboard });
@@ -173,12 +143,20 @@ export function useUpdateInventory() {
   });
 }
 
-// ─── Patients ─────────────────────────────────────────────────────────────────
+export function useDeleteInventory() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => actor!.deleteInventoryUnit(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.inventory }),
+  });
+}
+
 export function usePatients() {
   const { actor, enabled } = useEnabled();
   return useQuery({
     queryKey: QK.patients,
-    queryFn: async () => actor!.getAllPatients(),
+    queryFn: () => actor!.getAllPatients(),
     enabled,
   });
 }
@@ -187,8 +165,7 @@ export function useCreatePatient() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ patient, id }: { patient: Patient; id: bigint }) =>
-      actor!.createPatient(patient, id),
+    mutationFn: (patient: Patient) => actor!.createPatient(patient),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.patients });
       qc.invalidateQueries({ queryKey: QK.dashboard });
@@ -218,12 +195,11 @@ export function useDeletePatient() {
   });
 }
 
-// ─── Blood Requests ───────────────────────────────────────────────────────────
 export function useRequests() {
   const { actor, enabled } = useEnabled();
   return useQuery({
     queryKey: QK.requests,
-    queryFn: async () => actor!.getAllRequests(),
+    queryFn: () => actor!.getAllRequests(),
     enabled,
   });
 }
@@ -232,8 +208,7 @@ export function useCreateRequest() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ request, id }: { request: BloodRequest; id: bigint }) =>
-      actor!.createBloodRequest(request, id),
+    mutationFn: (request: BloodRequest) => actor!.createBloodRequest(request),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.requests });
       qc.invalidateQueries({ queryKey: QK.dashboard });
@@ -266,7 +241,6 @@ export function useDeleteRequest() {
   });
 }
 
-// ─── Seed ─────────────────────────────────────────────────────────────────────
 export function useSeedBloodGroups() {
   const { actor } = useActor();
   return useMutation({
@@ -274,12 +248,11 @@ export function useSeedBloodGroups() {
   });
 }
 
-// ─── Filter by blood group ────────────────────────────────────────────────────
 export function useDonorsByBloodGroup(bg: BloodGroup | "") {
   const { actor, enabled } = useEnabled();
   return useQuery({
     queryKey: [...QK.donors, bg],
-    queryFn: async () =>
+    queryFn: () =>
       bg ? actor!.getDonorsByBloodGroup(bg) : actor!.getAllDonors(),
     enabled,
   });

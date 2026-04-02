@@ -162,44 +162,47 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export interface StoredUser {
+    username: string;
+    passwordHash: string;
+    role: string;
+    displayName: string;
+}
 export interface backendInterface {
-    _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
-    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    createBloodRequest(request: BloodRequest, id: bigint): Promise<bigint>;
-    createCollection(collection: Donation, id: bigint): Promise<bigint>;
-    createDonor(donor: Donor, id: bigint): Promise<bigint>;
-    createInventoryUnit(unit: InventoryUnit, id: bigint): Promise<bigint>;
-    createPatient(patient: Patient, id: bigint): Promise<bigint>;
+    createBloodRequest(request: BloodRequest): Promise<bigint>;
+    createCollection(collection: Donation): Promise<bigint>;
+    createDonor(donor: Donor): Promise<bigint>;
+    createInventoryUnit(unit: InventoryUnit): Promise<bigint>;
+    createPatient(patient: Patient): Promise<bigint>;
     deleteBloodRequest(id: bigint): Promise<boolean>;
     deleteCollection(id: bigint): Promise<boolean>;
     deleteDonor(id: bigint): Promise<boolean>;
     deleteInventoryUnit(id: bigint): Promise<boolean>;
     deletePatient(id: bigint): Promise<boolean>;
-    getAllCollections(): Promise<Array<Donation>>;
-    getAllDonors(): Promise<Array<Donor>>;
-    getAllInventory(): Promise<Array<InventoryUnit>>;
-    getAllPatients(): Promise<Array<Patient>>;
-    getAllRequests(): Promise<Array<BloodRequest>>;
+    getAllCollections(): Promise<Array<[bigint, Donation]>>;
+    getAllDonors(): Promise<Array<[bigint, Donor]>>;
+    getAllInventory(): Promise<Array<[bigint, InventoryUnit]>>;
+    getAllPatients(): Promise<Array<[bigint, Patient]>>;
+    getAllRequests(): Promise<Array<[bigint, BloodRequest]>>;
     getBloodRequest(id: bigint): Promise<BloodRequest | null>;
-    getCallerUserProfile(): Promise<UserProfile | null>;
-    getCallerUserRole(): Promise<UserRole>;
     getCollection(id: bigint): Promise<Donation | null>;
     getDashboardSummary(): Promise<BloodBankSummary>;
     getDonor(id: bigint): Promise<Donor | null>;
-    getDonorsByBloodGroup(bloodGroup: BloodGroup): Promise<Array<Donor>>;
-    getInventoryByBloodGroup(bloodGroup: BloodGroup): Promise<Array<InventoryUnit>>;
+    getDonorsByBloodGroup(bloodGroup: BloodGroup): Promise<Array<[bigint, Donor]>>;
+    getInventoryByBloodGroup(bloodGroup: BloodGroup): Promise<Array<[bigint, InventoryUnit]>>;
     getInventoryUnit(id: bigint): Promise<InventoryUnit | null>;
     getPatient(id: bigint): Promise<Patient | null>;
-    getRequestsByStatus(status: string): Promise<Array<BloodRequest>>;
-    getUserProfile(user: Principal): Promise<UserProfile | null>;
-    isCallerAdmin(): Promise<boolean>;
-    saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    getRequestsByStatus(status: string): Promise<Array<[bigint, BloodRequest]>>;
     seedBloodGroups(): Promise<void>;
     updateBloodRequest(id: bigint, request: BloodRequest): Promise<boolean>;
     updateCollection(id: bigint, collection: Donation): Promise<boolean>;
     updateDonor(id: bigint, donor: Donor): Promise<boolean>;
     updateInventoryUnit(id: bigint, unit: InventoryUnit): Promise<boolean>;
     updatePatient(id: bigint, patient: Patient): Promise<boolean>;
+    addUser(user: StoredUser): Promise<boolean>;
+    getUser(username: string): Promise<StoredUser | null>;
+    updateUserPassword(username: string, newPasswordHash: string): Promise<boolean>;
+    getAllUsers(): Promise<Array<StoredUser>>;
 }
 import type { BloodBankSummary as _BloodBankSummary, BloodGroup as _BloodGroup, BloodRequest as _BloodRequest, Donation as _Donation, Donor as _Donor, InventoryUnit as _InventoryUnit, Patient as _Patient, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -232,7 +235,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async createBloodRequest(arg0: BloodRequest, arg1: bigint): Promise<bigint> {
+    async createBloodRequest(arg0: BloodRequest): Promise<bigint> {
         if (this.processError) {
             try {
                 const result = await this.actor.createBloodRequest(to_candid_BloodRequest_n3(this._uploadFile, this._downloadFile, arg0), arg1);
@@ -246,7 +249,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async createCollection(arg0: Donation, arg1: bigint): Promise<bigint> {
+    async createCollection(arg0: Donation): Promise<bigint> {
         if (this.processError) {
             try {
                 const result = await this.actor.createCollection(arg0, arg1);
@@ -260,7 +263,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async createDonor(arg0: Donor, arg1: bigint): Promise<bigint> {
+    async createDonor(arg0: Donor): Promise<bigint> {
         if (this.processError) {
             try {
                 const result = await this.actor.createDonor(to_candid_Donor_n7(this._uploadFile, this._downloadFile, arg0), arg1);
@@ -274,7 +277,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async createInventoryUnit(arg0: InventoryUnit, arg1: bigint): Promise<bigint> {
+    async createInventoryUnit(arg0: InventoryUnit): Promise<bigint> {
         if (this.processError) {
             try {
                 const result = await this.actor.createInventoryUnit(to_candid_InventoryUnit_n9(this._uploadFile, this._downloadFile, arg0), arg1);
@@ -288,7 +291,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async createPatient(arg0: Patient, arg1: bigint): Promise<bigint> {
+    async createPatient(arg0: Patient): Promise<bigint> {
         if (this.processError) {
             try {
                 const result = await this.actor.createPatient(to_candid_Patient_n11(this._uploadFile, this._downloadFile, arg0), arg1);
@@ -372,7 +375,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getAllCollections(): Promise<Array<Donation>> {
+    async getAllCollections(): Promise<Array<[bigint, Donation]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getAllCollections();
@@ -386,7 +389,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getAllDonors(): Promise<Array<Donor>> {
+    async getAllDonors(): Promise<Array<[bigint, Donor]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getAllDonors();
@@ -400,7 +403,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n13(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getAllInventory(): Promise<Array<InventoryUnit>> {
+    async getAllInventory(): Promise<Array<[bigint, InventoryUnit]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getAllInventory();
@@ -414,7 +417,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n18(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getAllPatients(): Promise<Array<Patient>> {
+    async getAllPatients(): Promise<Array<[bigint, Patient]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getAllPatients();
@@ -428,7 +431,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n21(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getAllRequests(): Promise<Array<BloodRequest>> {
+    async getAllRequests(): Promise<Array<[bigint, BloodRequest]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getAllRequests();
@@ -526,7 +529,7 @@ export class Backend implements backendInterface {
             return from_candid_opt_n36(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getDonorsByBloodGroup(arg0: BloodGroup): Promise<Array<Donor>> {
+    async getDonorsByBloodGroup(arg0: BloodGroup): Promise<Array<[bigint, Donor]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getDonorsByBloodGroup(to_candid_BloodGroup_n5(this._uploadFile, this._downloadFile, arg0));
@@ -540,7 +543,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n13(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getInventoryByBloodGroup(arg0: BloodGroup): Promise<Array<InventoryUnit>> {
+    async getInventoryByBloodGroup(arg0: BloodGroup): Promise<Array<[bigint, InventoryUnit]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getInventoryByBloodGroup(to_candid_BloodGroup_n5(this._uploadFile, this._downloadFile, arg0));
@@ -582,7 +585,7 @@ export class Backend implements backendInterface {
             return from_candid_opt_n38(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getRequestsByStatus(arg0: string): Promise<Array<BloodRequest>> {
+    async getRequestsByStatus(arg0: string): Promise<Array<[bigint, BloodRequest]>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getRequestsByStatus(arg0);
@@ -721,6 +724,18 @@ export class Backend implements backendInterface {
             const result = await this.actor.updatePatient(arg0, to_candid_Patient_n11(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
+    }
+    async addUser(user: any): Promise<boolean> {
+        try { return await (this.actor as any).addUser(user); } catch(e) { return false; }
+    }
+    async getUser(username: string): Promise<any> {
+        try { const r = await (this.actor as any).getUser(username); return r && r.length > 0 ? r[0] : null; } catch(e) { return null; }
+    }
+    async updateUserPassword(username: string, newHash: string): Promise<boolean> {
+        try { return await (this.actor as any).updateUserPassword(username, newHash); } catch(e) { return false; }
+    }
+    async getAllUsers(): Promise<any[]> {
+        try { return await (this.actor as any).getAllUsers(); } catch(e) { return []; }
     }
 }
 function from_candid_BloodBankSummary_n32(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _BloodBankSummary): BloodBankSummary {

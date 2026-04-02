@@ -39,11 +39,9 @@ import {
   useCreatePatient,
   useDeletePatient,
   usePatients,
-  useProfile,
   useUpdatePatient,
 } from "../hooks/useQueries";
 import { ALL_BLOOD_GROUPS, BG_DISPLAY } from "../utils/blood";
-import { generateId } from "../utils/time";
 
 const URGENCIES = ["low", "medium", "high", "critical"];
 
@@ -71,7 +69,7 @@ function PatientForm({
   loading: boolean;
   submitLabel: string;
 }) {
-  const set = (k: keyof Patient, v: any) => onChange({ ...value, [k]: v });
+  const set = (k: keyof Patient, v: unknown) => onChange({ ...value, [k]: v });
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
@@ -182,13 +180,10 @@ function PatientForm({
 }
 
 export function PatientsPage() {
-  const { data: patients = [], isLoading } = usePatients();
-  const { data: profile } = useProfile();
+  const { data: patientRows = [], isLoading } = usePatients();
   const createPatient = useCreatePatient();
   const updatePatient = useUpdatePatient();
   const deletePatient = useDeletePatient();
-
-  const isAdmin = profile?.role === "admin";
 
   const [search, setSearch] = useState("");
   const [bgFilter, setBgFilter] = useState<BloodGroup | "all">("all");
@@ -202,7 +197,7 @@ export function PatientsPage() {
   const [form, setForm] = useState<Patient>({ ...EMPTY_PATIENT });
   const [editForm, setEditForm] = useState<Patient>({ ...EMPTY_PATIENT });
 
-  const filtered = patients.filter((p) => {
+  const filtered = patientRows.filter(([, p]) => {
     const matchSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.hospital.toLowerCase().includes(search.toLowerCase());
@@ -217,7 +212,7 @@ export function PatientsPage() {
       return;
     }
     try {
-      await createPatient.mutateAsync({ patient: form, id: generateId() });
+      await createPatient.mutateAsync(form);
       toast.success("Patient added.");
       setAddOpen(false);
       setForm({ ...EMPTY_PATIENT });
@@ -238,7 +233,7 @@ export function PatientsPage() {
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (deleteTarget == null) return;
     try {
       await deletePatient.mutateAsync(deleteTarget);
       toast.success("Patient deleted.");
@@ -252,7 +247,7 @@ export function PatientsPage() {
     <AppLayout pageTitle="Patients">
       <PageHeader
         title="Patients"
-        subtitle={`${patients.length} registered patients`}
+        subtitle={`${patientRows.length} registered patients`}
         actions={
           <Button
             size="sm"
@@ -267,7 +262,6 @@ export function PatientsPage() {
           </Button>
         }
       />
-
       <Card className="shadow-card mb-4">
         <CardContent className="p-4 flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-48">
@@ -278,7 +272,10 @@ export function PatientsPage() {
               data-ocid="patient.search_input"
             />
           </div>
-          <Select value={bgFilter} onValueChange={(v) => setBgFilter(v as any)}>
+          <Select
+            value={bgFilter}
+            onValueChange={(v) => setBgFilter(v as BloodGroup | "all")}
+          >
             <SelectTrigger
               className="w-36"
               data-ocid="patient.filter.bg.select"
@@ -312,7 +309,6 @@ export function PatientsPage() {
           </Select>
         </CardContent>
       </Card>
-
       <Card className="shadow-card">
         <CardContent className="p-0">
           {isLoading ? (
@@ -356,10 +352,10 @@ export function PatientsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((p, idx) => (
+                {filtered.map(([id, p]) => (
                   <TableRow
-                    key={p.name + String(idx)}
-                    data-ocid={`patient.item.${idx + 1}`}
+                    key={String(id)}
+                    data-ocid={`patient.item.${String(id)}`}
                   >
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>
@@ -395,24 +391,22 @@ export function PatientsPage() {
                           size="icon"
                           className="w-7 h-7"
                           onClick={() => {
-                            setEditTarget({ id: BigInt(idx), patient: p });
+                            setEditTarget({ id, patient: p });
                             setEditForm({ ...p });
                           }}
-                          data-ocid={`patient.edit_button.${idx + 1}`}
+                          data-ocid={`patient.edit_button.${String(id)}`}
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => setDeleteTarget(BigInt(idx))}
-                            data-ocid={`patient.delete_button.${idx + 1}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteTarget(id)}
+                          data-ocid={`patient.delete_button.${String(id)}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -422,7 +416,6 @@ export function PatientsPage() {
           )}
         </CardContent>
       </Card>
-
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent data-ocid="patient.add.dialog">
           <DialogHeader>
@@ -437,7 +430,6 @@ export function PatientsPage() {
           />
         </DialogContent>
       </Dialog>
-
       <Dialog
         open={!!editTarget}
         onOpenChange={(o) => !o && setEditTarget(null)}
@@ -446,22 +438,23 @@ export function PatientsPage() {
           <DialogHeader>
             <DialogTitle>Edit Patient</DialogTitle>
           </DialogHeader>
-          <PatientForm
-            value={editForm}
-            onChange={setEditForm}
-            onSubmit={handleEdit}
-            loading={updatePatient.isPending}
-            submitLabel="Save Changes"
-          />
+          {editTarget && (
+            <PatientForm
+              value={editForm}
+              onChange={setEditForm}
+              onSubmit={handleEdit}
+              loading={updatePatient.isPending}
+              submitLabel="Save Changes"
+            />
+          )}
         </DialogContent>
       </Dialog>
-
       <ConfirmDialog
-        open={deleteTarget !== null}
+        open={deleteTarget != null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
         title="Delete Patient"
         description="Are you sure you want to delete this patient?"
+        onConfirm={handleDelete}
         loading={deletePatient.isPending}
       />
     </AppLayout>

@@ -15,240 +15,705 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Droplets, HeartPulse, Package, Shield, Users } from "lucide-react";
-import { Loader2 } from "lucide-react";
-import { motion } from "motion/react";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  ArrowLeft,
+  Building2,
+  Check,
+  ChevronRight,
+  Copy,
+  Droplets,
+  Eye,
+  EyeOff,
+  Heart,
+  Loader2,
+  RefreshCw,
+  Shield,
+  Stethoscope,
+  Users,
+} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useSaveProfile } from "../hooks/useQueries";
+import {
+  type AuthRole,
+  clearAuth,
+  generatePassword,
+  getPasswordForRole,
+  getStoredRole,
+  getUsernameForRole,
+  resetPassword,
+  storeAuth,
+  validateCredentials,
+} from "../utils/auth";
 
-interface Props {
-  onComplete: () => void;
-}
+// ── Role selection data ─────────────────────────────────────────────────────────────────────
+type RoleOption = {
+  role: AuthRole;
+  icon: React.ElementType;
+  title: string;
+  desc: string;
+  color: string;
+  bg: string;
+  border: string;
+};
 
-export function SetupProfile({ onComplete }: Props) {
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("staff");
-  const saveProfile = useSaveProfile();
+const ROLE_OPTIONS: RoleOption[] = [
+  {
+    role: "admin",
+    icon: Shield,
+    title: "Administrator",
+    desc: "Full system access — manage donors, inventory, reports",
+    color: "oklch(0.58 0.2 22)",
+    bg: "oklch(0.58 0.2 22 / 0.08)",
+    border: "oklch(0.58 0.2 22 / 0.3)",
+  },
+  {
+    role: "staff",
+    icon: Users,
+    title: "Staff Member",
+    desc: "Day-to-day operations — collections, requests, patients",
+    color: "oklch(0.52 0.18 240)",
+    bg: "oklch(0.52 0.18 240 / 0.08)",
+    border: "oklch(0.52 0.18 240 / 0.3)",
+  },
+  {
+    role: "donor",
+    icon: Heart,
+    title: "Blood Donor",
+    desc: "Register to donate blood and save lives",
+    color: "oklch(0.55 0.2 10)",
+    bg: "oklch(0.55 0.2 10 / 0.08)",
+    border: "oklch(0.55 0.2 10 / 0.3)",
+  },
+  {
+    role: "patient",
+    icon: Stethoscope,
+    title: "Patient / Receiver",
+    desc: "Request blood for yourself or a family member",
+    color: "oklch(0.56 0.16 145)",
+    bg: "oklch(0.56 0.16 145 / 0.08)",
+    border: "oklch(0.56 0.16 145 / 0.3)",
+  },
+  {
+    role: "hospital",
+    icon: Building2,
+    title: "Hospital",
+    desc: "Coordinate blood supply for your facility",
+    color: "oklch(0.62 0.17 70)",
+    bg: "oklch(0.62 0.17 70 / 0.08)",
+    border: "oklch(0.62 0.17 70 / 0.3)",
+  },
+];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Please enter your name.");
-      return;
-    }
-    try {
-      await saveProfile.mutateAsync({ name: name.trim(), role });
-      toast.success("Profile saved! Welcome.");
-      onComplete();
-    } catch {
-      toast.error("Failed to save profile. Please try again.");
-    }
+// ── ForgotPassword ──────────────────────────────────────────────────────────────────────
+function ForgotPasswordPanel({
+  role,
+  onBack,
+}: { role: AuthRole; onBack: () => void }) {
+  const [generated, setGenerated] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const handleGenerate = () => {
+    const newPass = resetPassword(role);
+    setGenerated(newPass);
+    setConfirmed(false);
+    setCopied(false);
   };
+
+  const handleCopy = () => {
+    if (!generated) return;
+    navigator.clipboard.writeText(generated).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const handleConfirm = () => {
+    setConfirmed(true);
+    toast.success(
+      "Password updated! You can now log in with the new password.",
+    );
+    setTimeout(onBack, 1500);
+  };
+
+  const opt = ROLE_OPTIONS.find((r) => r.role === role);
+  const username = getUsernameForRole(role);
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
+      key="forgot"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 20 }}
+      transition={{ duration: 0.25 }}
       className="w-full max-w-md"
     >
-      <Card className="shadow-card-hover border-border">
-        <CardHeader className="text-center pb-4">
-          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-3">
-            <Shield className="w-6 h-6 text-primary" />
-          </div>
-          <CardTitle className="font-display text-xl">
-            Complete Your Profile
-          </CardTitle>
-          <CardDescription>Set up your account to continue</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="setup-name">Full Name</Label>
-              <Input
-                id="setup-name"
-                placeholder="Dr. Jane Smith"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                data-ocid="setup.name.input"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="setup-role">Role</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger id="setup-role" data-ocid="setup.role.select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              type="submit"
-              className="w-full mt-2"
-              disabled={saveProfile.isPending}
-              data-ocid="setup.submit_button"
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-2 text-sm mb-8 transition-colors hover:text-white"
+        style={{ color: "#A7B0BF" }}
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to login
+      </button>
+
+      <div
+        className="rounded-2xl border p-8"
+        style={{ background: "#141B24", borderColor: "#222B38" }}
+      >
+        {/* Role header */}
+        {opt && (
+          <div className="flex items-center gap-3 mb-6">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{ background: opt.bg, border: `1px solid ${opt.border}` }}
             >
-              {saveProfile.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                "Save Profile & Continue"
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <opt.icon className="w-6 h-6" style={{ color: opt.color }} />
+            </div>
+            <div>
+              <p className="font-bold text-base" style={{ color: "#E9EEF6" }}>
+                Reset Password
+              </p>
+              <p className="text-xs" style={{ color: "#A7B0BF" }}>
+                {opt.title} • username:{" "}
+                <code
+                  className="px-1.5 py-0.5 rounded font-mono"
+                  style={{
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#E9EEF6",
+                  }}
+                >
+                  {username}
+                </code>
+              </p>
+            </div>
+          </div>
+        )}
+
+        <p className="text-sm mb-6" style={{ color: "#A7B0BF" }}>
+          Click the button below to generate a new secure password for this
+          account. Save it somewhere safe before confirming.
+        </p>
+
+        {/* Generate button */}
+        <Button
+          type="button"
+          onClick={handleGenerate}
+          className="w-full h-11 mb-4 font-semibold"
+          variant="outline"
+          style={{
+            borderColor: "#374151",
+            color: "#E9EEF6",
+            background: "rgba(255,255,255,0.04)",
+          }}
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          {generated ? "Regenerate Password" : "Generate New Password"}
+        </Button>
+
+        {/* Generated password display */}
+        {generated && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4"
+          >
+            <Label style={{ color: "#A7B0BF" }} className="mb-1.5 block">
+              New Password
+            </Label>
+            <div className="flex gap-2">
+              <div
+                className="flex-1 flex items-center px-3 h-11 rounded-lg border font-mono text-sm tracking-widest"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  borderColor: opt ? opt.border : "#374151",
+                  color: "#E9EEF6",
+                }}
+              >
+                {generated}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={handleCopy}
+                style={{
+                  borderColor: "#374151",
+                  background: "rgba(255,255,255,0.04)",
+                  color: copied ? "#4ade80" : "#A7B0BF",
+                }}
+                title="Copy password"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Confirm button */}
+        {generated && !confirmed && (
+          <Button
+            type="button"
+            onClick={handleConfirm}
+            className="w-full h-11 font-semibold"
+            style={{ background: "oklch(0.45 0.22 22)", color: "white" }}
+          >
+            Confirm & Set Password
+          </Button>
+        )}
+
+        {confirmed && (
+          <div
+            className="flex items-center gap-2 justify-center py-2 text-sm font-medium"
+            style={{ color: "#4ade80" }}
+          >
+            <Check className="w-4 h-4" />
+            Password updated! Redirecting to login…
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
 
+// ── LoginPage ───────────────────────────────────────────────────────────────────────────
 export function LoginPage() {
-  const { login, isLoggingIn } = useInternetIdentity();
+  const navigate = useNavigate();
+  const [step, setStep] = useState<"select" | "credentials" | "forgot">(
+    "select",
+  );
+  const [selectedRole, setSelectedRole] = useState<AuthRole | null>(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const FEATURES = [
-    { icon: Users, label: "Donor Management" },
-    { icon: Package, label: "Inventory Tracking" },
-    { icon: HeartPulse, label: "Patient Allocation" },
-  ];
+  const handleSelectRole = (role: AuthRole) => {
+    setSelectedRole(role);
+    setUsername("");
+    setPassword("");
+    setShowPass(false);
+    setStep("credentials");
+  };
+
+  const handleBack = () => {
+    setStep("select");
+    setSelectedRole(null);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRole) return;
+    if (!username.trim() || !password) {
+      toast.error("Please enter your username and password.");
+      return;
+    }
+
+    const valid = validateCredentials(selectedRole, username, password);
+    if (!valid) {
+      toast.error(
+        "Invalid credentials. Please check your username and password.",
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    // Store auth and set portal role for non-staff/admin
+    storeAuth(selectedRole);
+    if (
+      selectedRole === "donor" ||
+      selectedRole === "patient" ||
+      selectedRole === "hospital"
+    ) {
+      localStorage.setItem("portalRole", selectedRole);
+    } else {
+      localStorage.removeItem("portalRole");
+    }
+
+    toast.success(`Welcome! Logged in as ${selectedRole}.`);
+
+    // Instant redirect - no IC call needed
+    setTimeout(() => {
+      navigate({
+        to:
+          selectedRole === "admin" || selectedRole === "staff"
+            ? "/dashboard"
+            : "/app",
+      });
+      // Force page reload to trigger AuthGate re-check
+      window.location.href =
+        selectedRole === "admin" || selectedRole === "staff"
+          ? "/dashboard"
+          : "/app";
+    }, 300);
+  };
+
+  const currentPassword = selectedRole ? getPasswordForRole(selectedRole) : "";
+  const hint = selectedRole
+    ? { username: getUsernameForRole(selectedRole), password: currentPassword }
+    : null;
+  const selectedOption = ROLE_OPTIONS.find((r) => r.role === selectedRole);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sidebar via-sidebar to-[oklch(0.14_0.025_10)] flex">
-      {/* Left decorative panel */}
-      <div className="hidden lg:flex lg:flex-col lg:w-1/2 xl:w-3/5 relative overflow-hidden p-10">
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-              <Droplets className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="text-white font-bold text-lg leading-tight">
-                LifeLine
-              </p>
-              <p className="text-white/40 text-xs uppercase tracking-widest">
-                Blood Bank System
-              </p>
-            </div>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <h1 className="font-display text-4xl xl:text-5xl text-white leading-tight mb-4">
-              Saving Lives,
-              <br />
-              <span className="text-primary/90">One Drop</span> at a Time
-            </h1>
-            <p className="text-white/60 text-base max-w-md leading-relaxed">
-              Comprehensive blood bank management &#8212; from donor
-              registration to patient allocation, all in one secure platform.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="mt-12 grid grid-cols-3 gap-4"
-          >
-            {FEATURES.map(({ icon: Icon, label }) => (
-              <div
-                key={label}
-                className="bg-white/5 border border-white/10 rounded-xl p-4"
-              >
-                <Icon className="w-5 h-5 text-primary/80 mb-2" />
-                <p className="text-white/70 text-xs font-medium">{label}</p>
-              </div>
-            ))}
-          </motion.div>
-        </div>
-
-        {/* Background decoration */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-20 -right-20 w-80 h-80 rounded-full border-2 border-primary" />
-          <div className="absolute bottom-20 -left-10 w-60 h-60 rounded-full border border-primary" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-primary/30" />
-        </div>
-      </div>
-
-      {/* Right login panel */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12">
-        {/* Mobile logo */}
-        <div className="lg:hidden flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-            <Droplets className="w-6 h-6 text-white" />
-          </div>
-          <p className="text-white font-bold text-lg leading-tight">
-            LifeLine Blood Bank
-          </p>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="w-full max-w-md"
+    <div
+      className="min-h-screen flex flex-col"
+      style={{
+        background: "linear-gradient(135deg, #0B0F14 0%, #121824 100%)",
+      }}
+    >
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 sm:px-8 pt-6 pb-2 max-w-6xl mx-auto w-full">
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/" })}
+          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+          data-ocid="login.logo.button"
         >
-          <Card className="shadow-card-hover">
-            <CardHeader className="text-center">
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Droplets className="w-6 h-6 text-primary" />
-              </div>
-              <CardTitle className="font-display text-xl">
-                Welcome Back
-              </CardTitle>
-              <CardDescription>
-                Sign in to access the Blood Bank System
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Button
-                className="w-full gap-2"
-                size="lg"
-                onClick={login}
-                disabled={isLoggingIn}
-                data-ocid="login.primary_button"
-              >
-                {isLoggingIn ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Authenticating…
-                  </>
-                ) : (
-                  <>
-                    <Shield className="w-4 h-4" />
-                    Sign in with Internet Identity
-                  </>
-                )}
-              </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                Secure, decentralised authentication via Internet Identity. No
-                passwords required.
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ background: "oklch(0.45 0.22 22)" }}
+          >
+            <Droplets className="w-5 h-5 text-white" />
+          </div>
+          <span className="font-bold text-base" style={{ color: "#E9EEF6" }}>
+            BloodBank Pro
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/" })}
+          className="flex items-center gap-1.5 text-sm transition-colors hover:text-white"
+          style={{ color: "#A7B0BF" }}
+          data-ocid="login.back_to_home.button"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Home
+        </button>
+      </header>
 
-        <p className="mt-8 text-white/30 text-xs">
+      {/* Main */}
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-10">
+        <AnimatePresence mode="wait">
+          {step === "select" && (
+            <motion.div
+              key="select"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.25 }}
+              className="w-full max-w-3xl"
+            >
+              <div className="text-center mb-10">
+                <h1
+                  className="font-display text-3xl sm:text-4xl font-bold mb-3"
+                  style={{ color: "#E9EEF6" }}
+                >
+                  Who are you?
+                </h1>
+                <p className="text-sm" style={{ color: "#A7B0BF" }}>
+                  Select your role to access the right portal
+                </p>
+              </div>
+
+              <div
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                data-ocid="login.role_selection.section"
+              >
+                {ROLE_OPTIONS.map((opt, i) => (
+                  <motion.button
+                    key={opt.role}
+                    type="button"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.07 }}
+                    onClick={() => handleSelectRole(opt.role)}
+                    className="group flex flex-col items-start gap-3 p-5 rounded-2xl border text-left transition-all duration-200 hover:-translate-y-0.5 cursor-pointer"
+                    style={{ background: "#141B24", borderColor: "#222B38" }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor =
+                        opt.border;
+                      (e.currentTarget as HTMLButtonElement).style.background =
+                        opt.bg;
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor =
+                        "#222B38";
+                      (e.currentTarget as HTMLButtonElement).style.background =
+                        "#141B24";
+                    }}
+                    data-ocid={`login.${opt.role}.card`}
+                  >
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
+                      style={{
+                        background: opt.bg,
+                        border: `1px solid ${opt.border}`,
+                      }}
+                    >
+                      <opt.icon
+                        className="w-5 h-5"
+                        style={{ color: opt.color }}
+                      />
+                    </div>
+                    <div>
+                      <p
+                        className="font-semibold text-sm mb-1"
+                        style={{ color: "#E9EEF6" }}
+                      >
+                        {opt.title}
+                      </p>
+                      <p
+                        className="text-xs leading-relaxed"
+                        style={{ color: "#A7B0BF" }}
+                      >
+                        {opt.desc}
+                      </p>
+                    </div>
+                    <div
+                      className="flex items-center gap-1 text-xs font-medium mt-auto"
+                      style={{ color: opt.color }}
+                    >
+                      Continue
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {step === "credentials" && selectedRole && (
+            <motion.div
+              key="credentials"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.25 }}
+              className="w-full max-w-md"
+            >
+              <button
+                type="button"
+                onClick={handleBack}
+                className="flex items-center gap-2 text-sm mb-8 transition-colors hover:text-white"
+                style={{ color: "#A7B0BF" }}
+                data-ocid="login.back.button"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to role selection
+              </button>
+
+              <div
+                className="rounded-2xl border p-8"
+                style={{ background: "#141B24", borderColor: "#222B38" }}
+              >
+                {/* Role badge */}
+                {selectedOption && (
+                  <div className="flex items-center gap-3 mb-8">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center"
+                      style={{
+                        background: selectedOption.bg,
+                        border: `1px solid ${selectedOption.border}`,
+                      }}
+                    >
+                      <selectedOption.icon
+                        className="w-6 h-6"
+                        style={{ color: selectedOption.color }}
+                      />
+                    </div>
+                    <div>
+                      <p
+                        className="font-bold text-base"
+                        style={{ color: "#E9EEF6" }}
+                      >
+                        {selectedOption.title}
+                      </p>
+                      <p className="text-xs" style={{ color: "#A7B0BF" }}>
+                        Enter your credentials below
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="login-username"
+                      style={{ color: "#A7B0BF" }}
+                    >
+                      Username
+                    </Label>
+                    <Input
+                      id="login-username"
+                      placeholder={hint?.username ?? "Enter username"}
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      autoComplete="username"
+                      className="h-11"
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        borderColor: "#222B38",
+                        color: "#E9EEF6",
+                      }}
+                      data-ocid="login.username.input"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="login-password"
+                        style={{ color: "#A7B0BF" }}
+                      >
+                        Password
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => setStep("forgot")}
+                        className="text-xs transition-colors hover:text-white underline-offset-2 hover:underline"
+                        style={{ color: selectedOption?.color ?? "#A7B0BF" }}
+                        data-ocid="login.forgot_password.button"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showPass ? "text" : "password"}
+                        placeholder="Enter password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                        className="h-11 pr-10"
+                        style={{
+                          background: "rgba(255,255,255,0.04)",
+                          borderColor: "#222B38",
+                          color: "#E9EEF6",
+                        }}
+                        data-ocid="login.password.input"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass(!showPass)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors hover:text-white"
+                        style={{ color: "#A7B0BF" }}
+                        data-ocid="login.toggle_password.button"
+                      >
+                        {showPass ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full h-11 font-semibold mt-2"
+                    disabled={isSubmitting}
+                    style={{
+                      background: "oklch(0.45 0.22 22)",
+                      color: "white",
+                    }}
+                    data-ocid="login.submit_button"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Signing in…
+                      </>
+                    ) : (
+                      "Sign In"
+                    )}
+                  </Button>
+                </form>
+
+                {/* Demo hint */}
+                {hint && (
+                  <div
+                    className="mt-6 p-4 rounded-xl border"
+                    style={{
+                      background: "rgba(255,255,255,0.02)",
+                      borderColor: "rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <p
+                      className="text-xs font-semibold mb-2"
+                      style={{ color: "#A7B0BF" }}
+                    >
+                      Demo Credentials
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span style={{ color: "rgba(167,176,191,0.6)" }}>
+                          Username:{" "}
+                        </span>
+                        <code
+                          className="px-1.5 py-0.5 rounded font-mono"
+                          style={{
+                            background: "rgba(255,255,255,0.06)",
+                            color: "#E9EEF6",
+                          }}
+                        >
+                          {hint.username}
+                        </code>
+                      </div>
+                      <div>
+                        <span style={{ color: "rgba(167,176,191,0.6)" }}>
+                          Password:{" "}
+                        </span>
+                        <code
+                          className="px-1.5 py-0.5 rounded font-mono"
+                          style={{
+                            background: "rgba(255,255,255,0.06)",
+                            color: "#E9EEF6",
+                          }}
+                        >
+                          {hint.password}
+                        </code>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {step === "forgot" && selectedRole && (
+            <ForgotPasswordPanel
+              key="forgot"
+              role={selectedRole}
+              onBack={() => setStep("credentials")}
+            />
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Footer */}
+      <footer className="text-center pb-6 px-4">
+        <p className="text-xs" style={{ color: "rgba(167,176,191,0.4)" }}>
           &copy; {new Date().getFullYear()}{" "}
           <a
             href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`}
-            className="hover:text-white/60 transition-colors"
+            className="hover:text-white transition-colors"
             target="_blank"
             rel="noopener noreferrer"
           >
             Built with love using caffeine.ai
           </a>
         </p>
-      </div>
+      </footer>
     </div>
   );
 }

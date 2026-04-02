@@ -38,24 +38,22 @@ import {
   useCreateDonor,
   useDeleteDonor,
   useDonors,
-  useProfile,
   useUpdateDonor,
 } from "../hooks/useQueries";
 import { ALL_BLOOD_GROUPS, BG_DISPLAY } from "../utils/blood";
-import { formatDate, generateId, nowNs } from "../utils/time";
+import { formatDate, nowNs } from "../utils/time";
 
-const EMPTY_DONOR: Omit<
-  Donor,
-  "registrationTimestamp" | "lastDonationTimestamp"
-> = {
+const EMPTY_DONOR: Donor = {
   name: "",
-  age: BigInt(0),
+  age: BigInt(18),
   gender: "Male",
   bloodGroup: BloodGroup.aPos,
   phone: "",
   email: "",
   address: "",
   isActive: true,
+  registrationTimestamp: BigInt(0),
+  lastDonationTimestamp: BigInt(0),
 };
 
 function DonorForm({
@@ -65,21 +63,20 @@ function DonorForm({
   loading,
   submitLabel,
 }: {
-  value: typeof EMPTY_DONOR;
-  onChange: (d: typeof EMPTY_DONOR) => void;
+  value: Donor;
+  onChange: (d: Donor) => void;
   onSubmit: () => void;
   loading: boolean;
   submitLabel: string;
 }) {
-  const set = (k: string, v: any) => onChange({ ...value, [k]: v });
-
+  const set = (k: keyof Donor, v: unknown) => onChange({ ...value, [k]: v });
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2 space-y-1.5">
           <Label>Full Name</Label>
           <Input
-            placeholder="John Doe"
+            placeholder="Jane Doe"
             value={value.name}
             onChange={(e) => set("name", e.target.value)}
             data-ocid="donor.name.input"
@@ -91,9 +88,8 @@ function DonorForm({
             type="number"
             min={18}
             max={65}
-            placeholder="28"
-            value={Number(value.age) || ""}
-            onChange={(e) => set("age", BigInt(e.target.value || 0))}
+            value={Number(value.age)}
+            onChange={(e) => set("age", BigInt(e.target.value || 18))}
             data-ocid="donor.age.input"
           />
         </div>
@@ -116,7 +112,7 @@ function DonorForm({
             value={value.bloodGroup}
             onValueChange={(v) => set("bloodGroup", v as BloodGroup)}
           >
-            <SelectTrigger data-ocid="donor.bloodgroup.select">
+            <SelectTrigger data-ocid="donor.blood_group.select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -131,7 +127,7 @@ function DonorForm({
         <div className="space-y-1.5">
           <Label>Phone</Label>
           <Input
-            placeholder="+1 555-0100"
+            placeholder="+1 555-0000"
             value={value.phone}
             onChange={(e) => set("phone", e.target.value)}
             data-ocid="donor.phone.input"
@@ -141,7 +137,7 @@ function DonorForm({
           <Label>Email</Label>
           <Input
             type="email"
-            placeholder="john@example.com"
+            placeholder="donor@email.com"
             value={value.email}
             onChange={(e) => set("email", e.target.value)}
             data-ocid="donor.email.input"
@@ -150,11 +146,26 @@ function DonorForm({
         <div className="col-span-2 space-y-1.5">
           <Label>Address</Label>
           <Input
-            placeholder="123 Main St, City"
+            placeholder="123 Main St"
             value={value.address}
             onChange={(e) => set("address", e.target.value)}
             data-ocid="donor.address.input"
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Status</Label>
+          <Select
+            value={value.isActive ? "active" : "inactive"}
+            onValueChange={(v) => set("isActive", v === "active")}
+          >
+            <SelectTrigger data-ocid="donor.status.select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <Button
@@ -177,13 +188,10 @@ function DonorForm({
 }
 
 export function DonorsPage() {
-  const { data: donors = [], isLoading } = useDonors();
-  const { data: profile } = useProfile();
+  const { data: donorRows = [], isLoading } = useDonors();
   const createDonor = useCreateDonor();
   const updateDonor = useUpdateDonor();
   const deleteDonor = useDeleteDonor();
-
-  const isAdmin = profile?.role === "admin";
 
   const [search, setSearch] = useState("");
   const [bgFilter, setBgFilter] = useState<BloodGroup | "all">("all");
@@ -193,16 +201,14 @@ export function DonorsPage() {
     donor: Donor;
   } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<bigint | null>(null);
+  const [form, setForm] = useState<Donor>({ ...EMPTY_DONOR });
+  const [editForm, setEditForm] = useState<Donor>({ ...EMPTY_DONOR });
 
-  const [form, setForm] = useState<typeof EMPTY_DONOR>({ ...EMPTY_DONOR });
-  const [editForm, setEditForm] = useState<typeof EMPTY_DONOR>({
-    ...EMPTY_DONOR,
-  });
-
-  const filtered = donors.filter((d) => {
+  const filtered = donorRows.filter(([, d]) => {
     const matchSearch =
+      !search ||
       d.name.toLowerCase().includes(search.toLowerCase()) ||
-      d.phone.toLowerCase().includes(search.toLowerCase());
+      d.phone.includes(search);
     const matchBg = bgFilter === "all" || d.bloodGroup === bgFilter;
     return matchSearch && matchBg;
   });
@@ -212,16 +218,17 @@ export function DonorsPage() {
       toast.error("Name is required.");
       return;
     }
+    if (Number(form.age) < 18 || Number(form.age) > 65) {
+      toast.error("Age must be 18–65.");
+      return;
+    }
     try {
       await createDonor.mutateAsync({
-        donor: {
-          ...form,
-          registrationTimestamp: nowNs(),
-          lastDonationTimestamp: BigInt(0),
-        },
-        id: generateId(),
+        ...form,
+        registrationTimestamp: nowNs(),
+        lastDonationTimestamp: BigInt(0),
       });
-      toast.success("Donor added successfully.");
+      toast.success("Donor added.");
       setAddOpen(false);
       setForm({ ...EMPTY_DONOR });
     } catch {
@@ -232,14 +239,7 @@ export function DonorsPage() {
   const handleEdit = async () => {
     if (!editTarget) return;
     try {
-      await updateDonor.mutateAsync({
-        id: editTarget.id,
-        donor: {
-          ...editForm,
-          registrationTimestamp: editTarget.donor.registrationTimestamp,
-          lastDonationTimestamp: editTarget.donor.lastDonationTimestamp,
-        },
-      });
+      await updateDonor.mutateAsync({ id: editTarget.id, donor: editForm });
       toast.success("Donor updated.");
       setEditTarget(null);
     } catch {
@@ -248,10 +248,10 @@ export function DonorsPage() {
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (deleteTarget == null) return;
     try {
       await deleteDonor.mutateAsync(deleteTarget);
-      toast.success("Donor deleted.");
+      toast.success("Donor removed.");
       setDeleteTarget(null);
     } catch {
       toast.error("Failed to delete donor.");
@@ -262,14 +262,11 @@ export function DonorsPage() {
     <AppLayout pageTitle="Donors">
       <PageHeader
         title="Donors"
-        subtitle={`${donors.length} registered donors`}
+        subtitle={`${donorRows.length} registered donors`}
         actions={
           <Button
             size="sm"
-            onClick={() => {
-              setForm({ ...EMPTY_DONOR });
-              setAddOpen(true);
-            }}
+            onClick={() => setAddOpen(true)}
             data-ocid="donor.add.open_modal_button"
           >
             <Plus className="w-4 h-4 mr-1.5" />
@@ -277,22 +274,23 @@ export function DonorsPage() {
           </Button>
         }
       />
-
-      {/* Filters */}
       <Card className="shadow-card mb-4">
         <CardContent className="p-4 flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search by name or phone…"
-              className="pl-9"
+              className="pl-8 h-9"
+              placeholder="Search donors…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              data-ocid="donor.search_input"
+              data-ocid="donor.search.input"
             />
           </div>
-          <Select value={bgFilter} onValueChange={(v) => setBgFilter(v as any)}>
-            <SelectTrigger className="w-40" data-ocid="donor.bloodgroup.select">
+          <Select
+            value={bgFilter}
+            onValueChange={(v) => setBgFilter(v as BloodGroup | "all")}
+          >
+            <SelectTrigger className="w-36" data-ocid="donor.filter.bg.select">
               <SelectValue placeholder="Blood Group" />
             </SelectTrigger>
             <SelectContent>
@@ -304,15 +302,16 @@ export function DonorsPage() {
               ))}
             </SelectContent>
           </Select>
+          <p className="text-sm text-muted-foreground flex items-center">
+            {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+          </p>
         </CardContent>
       </Card>
-
-      {/* Table */}
       <Card className="shadow-card">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-4 space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
+              {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-12 rounded-lg" />
               ))}
             </div>
@@ -320,22 +319,16 @@ export function DonorsPage() {
             <EmptyState
               icon={<Users className="w-8 h-8" />}
               title="No donors found"
-              message={
-                search || bgFilter !== "all"
-                  ? "Try adjusting your filters."
-                  : "Add your first donor to get started."
-              }
+              message="Add a donor to get started."
               action={
-                !search && bgFilter === "all" ? (
-                  <Button
-                    size="sm"
-                    onClick={() => setAddOpen(true)}
-                    data-ocid="donor.empty.add.open_modal_button"
-                  >
-                    <Plus className="w-4 h-4 mr-1.5" />
-                    Add Donor
-                  </Button>
-                ) : undefined
+                <Button
+                  size="sm"
+                  onClick={() => setAddOpen(true)}
+                  data-ocid="donor.empty.add.open_modal_button"
+                >
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Add Donor
+                </Button>
               }
             />
           ) : (
@@ -344,42 +337,37 @@ export function DonorsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Blood Group</TableHead>
-                  <TableHead className="hidden md:table-cell">Age</TableHead>
-                  <TableHead className="hidden md:table-cell">Gender</TableHead>
-                  <TableHead className="hidden lg:table-cell">Phone</TableHead>
+                  <TableHead className="hidden sm:table-cell">Age</TableHead>
+                  <TableHead className="hidden md:table-cell">Phone</TableHead>
                   <TableHead className="hidden lg:table-cell">
-                    Last Donation
+                    Last Donated
                   </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((donor, idx) => (
+                {filtered.map(([id, donor]) => (
                   <TableRow
-                    key={donor.name + String(idx)}
-                    data-ocid={`donor.item.${idx + 1}`}
+                    key={String(id)}
+                    data-ocid={`donor.item.${String(id)}`}
                   >
                     <TableCell className="font-medium">{donor.name}</TableCell>
                     <TableCell>
                       <BloodGroupBadge bloodGroup={donor.bloodGroup} />
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden sm:table-cell">
                       {Number(donor.age)}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {donor.gender}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
                       {donor.phone}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      {donor.lastDonationTimestamp
-                        ? formatDate(donor.lastDonationTimestamp)
-                        : "-"}
+                      {formatDate(donor.lastDonationTimestamp)}
                     </TableCell>
                     <TableCell>
                       <Badge
+                        variant="outline"
                         className={
                           donor.isActive
                             ? "bg-success/10 text-success-foreground border-success/20"
@@ -396,33 +384,22 @@ export function DonorsPage() {
                           size="icon"
                           className="w-7 h-7"
                           onClick={() => {
-                            setEditTarget({ id: BigInt(idx), donor });
-                            setEditForm({
-                              name: donor.name,
-                              age: donor.age,
-                              gender: donor.gender,
-                              bloodGroup: donor.bloodGroup,
-                              phone: donor.phone,
-                              email: donor.email,
-                              address: donor.address,
-                              isActive: donor.isActive,
-                            });
+                            setEditTarget({ id, donor });
+                            setEditForm({ ...donor });
                           }}
-                          data-ocid={`donor.edit_button.${idx + 1}`}
+                          data-ocid={`donor.edit_button.${String(id)}`}
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => setDeleteTarget(BigInt(idx))}
-                            data-ocid={`donor.delete_button.${idx + 1}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteTarget(id)}
+                          data-ocid={`donor.delete_button.${String(id)}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -432,12 +409,10 @@ export function DonorsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Add modal */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent data-ocid="donor.add.dialog">
           <DialogHeader>
-            <DialogTitle>Add New Donor</DialogTitle>
+            <DialogTitle>Add Donor</DialogTitle>
           </DialogHeader>
           <DonorForm
             value={form}
@@ -448,32 +423,31 @@ export function DonorsPage() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* Edit modal */}
       <Dialog
         open={!!editTarget}
-        onOpenChange={(o) => !o && setEditTarget(null)}
+        onOpenChange={(open) => !open && setEditTarget(null)}
       >
         <DialogContent data-ocid="donor.edit.dialog">
           <DialogHeader>
             <DialogTitle>Edit Donor</DialogTitle>
           </DialogHeader>
-          <DonorForm
-            value={editForm}
-            onChange={setEditForm}
-            onSubmit={handleEdit}
-            loading={updateDonor.isPending}
-            submitLabel="Save Changes"
-          />
+          {editTarget && (
+            <DonorForm
+              value={editForm}
+              onChange={setEditForm}
+              onSubmit={handleEdit}
+              loading={updateDonor.isPending}
+              submitLabel="Save Changes"
+            />
+          )}
         </DialogContent>
       </Dialog>
-
       <ConfirmDialog
-        open={deleteTarget !== null}
+        open={deleteTarget != null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
         title="Delete Donor"
-        description="Are you sure you want to delete this donor? This action cannot be undone."
+        description="This action cannot be undone."
+        onConfirm={handleDelete}
         loading={deleteDonor.isPending}
       />
     </AppLayout>

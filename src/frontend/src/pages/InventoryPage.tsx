@@ -40,13 +40,7 @@ import {
   useUpdateInventory,
 } from "../hooks/useQueries";
 import { ALL_BLOOD_GROUPS, BG_DISPLAY, getStockLevel } from "../utils/blood";
-import {
-  computeExpiry,
-  daysUntil,
-  formatDate,
-  generateId,
-  nowNs,
-} from "../utils/time";
+import { computeExpiry, daysUntil, formatDate, nowNs } from "../utils/time";
 
 const INVENTORY_STATUSES = ["available", "reserved", "used", "expired"];
 
@@ -59,21 +53,19 @@ const EMPTY_UNIT: InventoryUnit = {
   status: "available",
 };
 
-type InventoryFormProps = {
-  value: InventoryUnit;
-  onChange: (k: keyof InventoryUnit, v: any) => void;
-  onSubmit: () => void;
-  loading: boolean;
-  submitLabel: string;
-};
-
 function InventoryForm({
   value,
   onChange,
   onSubmit,
   loading,
   submitLabel,
-}: InventoryFormProps) {
+}: {
+  value: InventoryUnit;
+  onChange: (k: keyof InventoryUnit, v: unknown) => void;
+  onSubmit: () => void;
+  loading: boolean;
+  submitLabel: string;
+}) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
@@ -143,58 +135,8 @@ function InventoryForm({
   );
 }
 
-type InventoryRowProps = {
-  unit: InventoryUnit;
-  idx: number;
-  onEdit: (idx: number, unit: InventoryUnit) => void;
-};
-
-function InventoryRow({ unit, idx, onEdit }: InventoryRowProps) {
-  const days = daysUntil(unit.expiryTimestamp);
-  const rowClass =
-    days < 0 ? "bg-destructive/5" : days <= 7 ? "bg-warning/5" : "";
-  return (
-    <TableRow className={rowClass} data-ocid={`inventory.item.${idx + 1}`}>
-      <TableCell>
-        <BloodGroupBadge bloodGroup={unit.bloodGroup} />
-      </TableCell>
-      <TableCell className="font-semibold">{Number(unit.units)}</TableCell>
-      <TableCell>{formatDate(unit.collectedTimestamp)}</TableCell>
-      <TableCell>{formatDate(unit.expiryTimestamp)}</TableCell>
-      <TableCell>
-        {days < 0 ? (
-          <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">
-            <AlertTriangle className="w-3 h-3 mr-1" />
-            Expired
-          </Badge>
-        ) : days <= 7 ? (
-          <Badge className="bg-warning/20 text-warning-foreground border-warning/30 text-xs">
-            {days}d
-          </Badge>
-        ) : (
-          <span className="text-sm text-muted-foreground">{days}d</span>
-        )}
-      </TableCell>
-      <TableCell>
-        <StatusBadge status={unit.status} />
-      </TableCell>
-      <TableCell className="text-right">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-7 h-7"
-          onClick={() => onEdit(idx, unit)}
-          data-ocid={`inventory.edit_button.${idx + 1}`}
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-}
-
 export function InventoryPage() {
-  const { data: inventory = [], isLoading } = useInventory();
+  const { data: inventoryRows = [], isLoading } = useInventory();
   const createInventory = useCreateInventory();
   const updateInventory = useUpdateInventory();
 
@@ -208,29 +150,30 @@ export function InventoryPage() {
   const [form, setForm] = useState<InventoryUnit>({ ...EMPTY_UNIT });
   const [editForm, setEditForm] = useState<InventoryUnit>({ ...EMPTY_UNIT });
 
-  // Summary: available units by blood group
   const bgSummary = new Map<BloodGroup, number>();
-  for (const u of inventory) {
+  for (const [, u] of inventoryRows) {
     if (u.status === "available") {
-      const prev = bgSummary.get(u.bloodGroup) ?? 0;
-      bgSummary.set(u.bloodGroup, prev + Number(u.units));
+      bgSummary.set(
+        u.bloodGroup,
+        (bgSummary.get(u.bloodGroup) ?? 0) + Number(u.units),
+      );
     }
   }
 
-  const filtered = inventory.filter((u) => {
+  const filtered = inventoryRows.filter(([, u]) => {
     const matchBg = bgFilter === "all" || u.bloodGroup === bgFilter;
     const matchStatus = statusFilter === "all" || u.status === statusFilter;
     return matchBg && matchStatus;
   });
 
-  const set = (k: keyof InventoryUnit, v: any) =>
+  const set = (k: keyof InventoryUnit, v: unknown) =>
     setForm((p) => ({ ...p, [k]: v }));
-  const setEdit = (k: keyof InventoryUnit, v: any) =>
+  const setEdit = (k: keyof InventoryUnit, v: unknown) =>
     setEditForm((p) => ({ ...p, [k]: v }));
 
   const handleAdd = async () => {
     try {
-      await createInventory.mutateAsync({ unit: form, id: generateId() });
+      await createInventory.mutateAsync(form);
       toast.success("Inventory unit added.");
       setAddOpen(false);
       setForm({ ...EMPTY_UNIT });
@@ -248,11 +191,6 @@ export function InventoryPage() {
     } catch {
       toast.error("Failed to update inventory unit.");
     }
-  };
-
-  const handleOpenEdit = (idx: number, unit: InventoryUnit) => {
-    setEditTarget({ id: BigInt(idx), unit });
-    setEditForm({ ...unit });
   };
 
   return (
@@ -275,12 +213,11 @@ export function InventoryPage() {
         }
       />
 
-      {/* Summary cards */}
       <div className="grid grid-cols-4 sm:grid-cols-8 gap-3 mb-5">
         {ALL_BLOOD_GROUPS.map((bg, idx) => {
           const units = bgSummary.get(bg) ?? 0;
           const level = getStockLevel(units);
-          const levelTextColor =
+          const levelColor =
             level === "critical"
               ? "text-destructive"
               : level === "low"
@@ -289,9 +226,7 @@ export function InventoryPage() {
           return (
             <Card
               key={bg}
-              className={`shadow-card cursor-pointer transition-all ${
-                bgFilter === bg ? "ring-2 ring-primary" : ""
-              }`}
+              className={`shadow-card cursor-pointer transition-all ${bgFilter === bg ? "ring-2 ring-primary" : ""}`}
               onClick={() => setBgFilter(bgFilter === bg ? "all" : bg)}
               data-ocid={`inventory.bloodgroup.item.${idx + 1}`}
             >
@@ -299,7 +234,7 @@ export function InventoryPage() {
                 <BloodGroupBadge bloodGroup={bg} size="sm" />
                 <p className="text-xl font-bold mt-1">{units}</p>
                 <p
-                  className={`text-[10px] font-semibold uppercase ${levelTextColor}`}
+                  className={`text-[10px] font-semibold uppercase ${levelColor}`}
                 >
                   {level === "critical"
                     ? "Critical"
@@ -313,10 +248,12 @@ export function InventoryPage() {
         })}
       </div>
 
-      {/* Table filter */}
       <Card className="shadow-card mb-4">
         <CardContent className="p-4 flex flex-wrap gap-3">
-          <Select value={bgFilter} onValueChange={(v) => setBgFilter(v as any)}>
+          <Select
+            value={bgFilter}
+            onValueChange={(v) => setBgFilter(v as BloodGroup | "all")}
+          >
             <SelectTrigger
               className="w-40"
               data-ocid="inventory.filter.bg.select"
@@ -393,14 +330,64 @@ export function InventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((u, idx) => (
-                  <InventoryRow
-                    key={u.bloodGroup + String(idx)}
-                    unit={u}
-                    idx={idx}
-                    onEdit={handleOpenEdit}
-                  />
-                ))}
+                {filtered.map(([id, u]) => {
+                  const days = daysUntil(u.expiryTimestamp);
+                  const rowClass =
+                    days < 0
+                      ? "bg-destructive/5"
+                      : days <= 7
+                        ? "bg-warning/5"
+                        : "";
+                  return (
+                    <TableRow
+                      key={String(id)}
+                      className={rowClass}
+                      data-ocid={`inventory.item.${String(id)}`}
+                    >
+                      <TableCell>
+                        <BloodGroupBadge bloodGroup={u.bloodGroup} />
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        {Number(u.units)}
+                      </TableCell>
+                      <TableCell>{formatDate(u.collectedTimestamp)}</TableCell>
+                      <TableCell>{formatDate(u.expiryTimestamp)}</TableCell>
+                      <TableCell>
+                        {days < 0 ? (
+                          <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Expired
+                          </Badge>
+                        ) : days <= 7 ? (
+                          <Badge className="bg-warning/20 text-warning-foreground border-warning/30 text-xs">
+                            {days}d
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {days}d
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={u.status} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7"
+                          onClick={() => {
+                            setEditTarget({ id, unit: u });
+                            setEditForm({ ...u });
+                          }}
+                          data-ocid={`inventory.edit_button.${String(id)}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -421,7 +408,6 @@ export function InventoryPage() {
           />
         </DialogContent>
       </Dialog>
-
       <Dialog
         open={!!editTarget}
         onOpenChange={(o) => !o && setEditTarget(null)}

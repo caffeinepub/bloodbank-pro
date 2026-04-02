@@ -7,74 +7,45 @@ import {
   createRouter,
   redirect,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useActor } from "./hooks/useActor";
-import { useInternetIdentity } from "./hooks/useInternetIdentity";
-import { useProfile } from "./hooks/useQueries";
 import { CollectionsPage } from "./pages/CollectionsPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DonorPortalPage } from "./pages/DonorPortalPage";
 import { DonorsPage } from "./pages/DonorsPage";
+import { HospitalPortalPage } from "./pages/HospitalPortalPage";
 import { InventoryPage } from "./pages/InventoryPage";
-import { LoginPage, SetupProfile } from "./pages/LoginPage";
+import { LandingPage } from "./pages/LandingPage";
+import { LoginPage } from "./pages/LoginPage";
+import { PatientPortalPage } from "./pages/PatientPortalPage";
 import { PatientsPage } from "./pages/PatientsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { RequestsPage } from "./pages/RequestsPage";
+import { isLoggedIn } from "./utils/auth";
 
-// ─── Auth gate wrapper ─────────────────────────────────────────────────────────
-// Wraps all authenticated routes; handles seeding and setup
 function AuthGate() {
-  const { identity, isInitializing } = useInternetIdentity();
   const { actor } = useActor();
-  const { data: profile, isLoading: profileLoading } = useProfile();
-  const [seeded, setSeeded] = useState(false);
-  const [showSetup, setShowSetup] = useState(false);
+  const seeded = useRef(false);
 
-  // Seed blood groups once on actor ready
   useEffect(() => {
-    if (actor && !seeded) {
-      setSeeded(true);
-      actor.seedBloodGroups().catch(() => {
-        /* ignore */
-      });
+    if (actor && !seeded.current) {
+      seeded.current = true;
+      actor.seedBloodGroups().catch(() => {});
     }
-  }, [actor, seeded]);
+  }, [actor]);
 
-  // After profile loads, check if setup needed
-  useEffect(() => {
-    if (!profileLoading && profile === null && identity) {
-      setShowSetup(true);
-    } else if (profile) {
-      setShowSetup(false);
-    }
-  }, [profile, profileLoading, identity]);
-
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!identity) {
+  if (!isLoggedIn()) {
     return <LoginPage />;
   }
 
-  if (showSetup && !profileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-sidebar p-6">
-        <SetupProfile onComplete={() => setShowSetup(false)} />
-      </div>
-    );
-  }
+  const portalRole = localStorage.getItem("portalRole");
+  if (portalRole === "donor") return <DonorPortalPage />;
+  if (portalRole === "patient") return <PatientPortalPage />;
+  if (portalRole === "hospital") return <HospitalPortalPage />;
 
   return <Outlet />;
 }
 
-// ─── Routes ──────────────────────────────────────────────────────────────────────
 const rootRoute = createRootRoute({
   component: () => (
     <>
@@ -84,19 +55,22 @@ const rootRoute = createRootRoute({
   ),
 });
 
+const landingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: LandingPage,
+});
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: LoginPage,
+});
+
 const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "auth",
   component: AuthGate,
-});
-
-const indexRoute = createRoute({
-  getParentRoute: () => authRoute,
-  path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/dashboard" });
-  },
-  component: () => null,
 });
 
 const dashboardRoute = createRoute({
@@ -141,9 +115,20 @@ const reportsRoute = createRoute({
   component: ReportsPage,
 });
 
+const appRedirectRoute = createRoute({
+  getParentRoute: () => authRoute,
+  path: "/app",
+  beforeLoad: () => {
+    throw redirect({ to: "/dashboard" });
+  },
+  component: () => null,
+});
+
 const routeTree = rootRoute.addChildren([
+  landingRoute,
+  loginRoute,
   authRoute.addChildren([
-    indexRoute,
+    appRedirectRoute,
     dashboardRoute,
     donorsRoute,
     collectionsRoute,

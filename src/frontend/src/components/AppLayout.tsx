@@ -19,8 +19,8 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useState } from "react";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useDashboard, useProfile } from "../hooks/useQueries";
+import { useDashboard } from "../hooks/useQueries";
+import { clearAuth, getStoredRole } from "../utils/auth";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -40,23 +40,22 @@ interface Props {
 export function AppLayout({ children, pageTitle }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const { clear } = useInternetIdentity();
-  const { data: profile } = useProfile();
   const { data: summary } = useDashboard();
 
+  const role = getStoredRole();
+  const displayName = role
+    ? role.charAt(0).toUpperCase() + role.slice(1)
+    : "User";
+  const initials = displayName.slice(0, 2).toUpperCase();
   const pendingCount = summary ? Number(summary.pendingRequests) : 0;
-  const initials = profile?.name
-    ? profile.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "U";
+
+  const handleLogout = () => {
+    clearAuth();
+    window.location.href = "/";
+  };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
         <div className="w-9 h-9 rounded-lg bg-primary/90 flex items-center justify-center shrink-0">
           <Droplets className="w-5 h-5 text-white" />
@@ -71,7 +70,6 @@ export function AppLayout({ children, pageTitle }: Props) {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
           const active =
@@ -112,7 +110,6 @@ export function AppLayout({ children, pageTitle }: Props) {
 
       <Separator className="bg-sidebar-border mx-3" />
 
-      {/* User footer */}
       <div className="px-3 py-4">
         <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-sidebar-accent/50">
           <Avatar className="w-8 h-8 shrink-0">
@@ -122,18 +119,19 @@ export function AppLayout({ children, pageTitle }: Props) {
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-sidebar-foreground truncate">
-              {profile?.name ?? "User"}
+              {displayName}
             </p>
             <p className="text-[10px] text-sidebar-foreground/50 capitalize">
-              {profile?.role ?? "staff"}
+              {role ?? "staff"}
             </p>
           </div>
           <Button
             variant="ghost"
             size="icon"
             className="w-7 h-7 text-sidebar-foreground/50 hover:text-destructive hover:bg-destructive/10 shrink-0"
-            onClick={clear}
+            onClick={handleLogout}
             data-ocid="nav.logout.button"
+            title="Logout"
           >
             <LogOut className="w-3.5 h-3.5" />
           </Button>
@@ -144,12 +142,10 @@ export function AppLayout({ children, pageTitle }: Props) {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex lg:flex-col w-60 bg-sidebar border-r border-sidebar-border shrink-0">
         <SidebarContent />
       </aside>
 
-      {/* Mobile sidebar overlay */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -167,15 +163,23 @@ export function AppLayout({ children, pageTitle }: Props) {
               transition={{ type: "spring", damping: 28, stiffness: 280 }}
               className="fixed inset-y-0 left-0 z-50 w-60 bg-sidebar border-r border-sidebar-border lg:hidden"
             >
+              <div className="flex items-center justify-end px-3 pt-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-8 h-8 text-sidebar-foreground/50"
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
               <SidebarContent />
             </motion.aside>
           </>
         )}
       </AnimatePresence>
 
-      {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Top header */}
         <header className="flex items-center justify-between h-14 px-4 lg:px-6 bg-card border-b border-border shrink-0">
           <div className="flex items-center gap-3">
             <Button
@@ -210,10 +214,19 @@ export function AppLayout({ children, pageTitle }: Props) {
                 {initials}
               </AvatarFallback>
             </Avatar>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 text-muted-foreground hover:text-destructive"
+              onClick={handleLogout}
+              title="Logout"
+              data-ocid="nav.header_logout.button"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 lg:p-6 page-enter">{children}</div>
         </main>

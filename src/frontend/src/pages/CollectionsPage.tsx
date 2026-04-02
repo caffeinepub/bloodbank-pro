@@ -39,7 +39,7 @@ import {
   useDonors,
   useUpdateCollection,
 } from "../hooks/useQueries";
-import { formatDate, generateId, nowNs } from "../utils/time";
+import { formatDate, nowNs } from "../utils/time";
 
 const TEST_STATUSES = ["pending", "passed", "failed"];
 const STATUS_FILTER_OPTIONS = ["all", ...TEST_STATUSES];
@@ -54,8 +54,8 @@ const EMPTY_COLLECTION: Donation = {
 };
 
 export function CollectionsPage() {
-  const { data: collections = [], isLoading } = useCollections();
-  const { data: donors = [] } = useDonors();
+  const { data: collectionRows = [], isLoading } = useCollections();
+  const { data: donorRows = [] } = useDonors();
   const createCollection = useCreateCollection();
   const updateCollection = useUpdateCollection();
 
@@ -68,11 +68,10 @@ export function CollectionsPage() {
   const [form, setForm] = useState<Donation>({ ...EMPTY_COLLECTION });
   const [editForm, setEditForm] = useState<Donation>({ ...EMPTY_COLLECTION });
 
-  // Donor name map (index-based since backend uses bigint IDs we assigned)
-  const donorMap = new Map<number, string>();
-  donors.forEach((d, idx) => donorMap.set(idx, d.name));
+  const donorMap = new Map<string, string>();
+  for (const [id, d] of donorRows) donorMap.set(String(id), d.name);
 
-  const filtered = collections.filter((c) =>
+  const filtered = collectionRows.filter(([, c]) =>
     statusFilter === "all" ? true : c.testStatus === statusFilter,
   );
 
@@ -85,8 +84,8 @@ export function CollectionsPage() {
   const handleAdd = async () => {
     try {
       await createCollection.mutateAsync({
-        collection: form,
-        id: generateId(),
+        ...form,
+        collectionTimestamp: nowNs(),
       });
       toast.success("Collection record added.");
       setAddOpen(false);
@@ -137,8 +136,8 @@ export function CollectionsPage() {
               <SelectValue placeholder="Select donor" />
             </SelectTrigger>
             <SelectContent>
-              {donors.map((d, idx) => (
-                <SelectItem key={d.name + String(idx)} value={String(idx)}>
+              {donorRows.map(([id, d]) => (
+                <SelectItem key={String(id)} value={String(id)}>
                   {d.name}
                 </SelectItem>
               ))}
@@ -228,7 +227,7 @@ export function CollectionsPage() {
     <AppLayout pageTitle="Collections">
       <PageHeader
         title="Blood Collections"
-        subtitle={`${collections.length} collection records`}
+        subtitle={`${collectionRows.length} collection records`}
         actions={
           <Button
             size="sm"
@@ -240,8 +239,6 @@ export function CollectionsPage() {
           </Button>
         }
       />
-
-      {/* Filter */}
       <Card className="shadow-card mb-4">
         <CardContent className="p-4 flex gap-3">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -265,7 +262,6 @@ export function CollectionsPage() {
           </div>
         </CardContent>
       </Card>
-
       <Card className="shadow-card">
         <CardContent className="p-0">
           {isLoading ? (
@@ -306,13 +302,13 @@ export function CollectionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((c, idx) => (
+                {filtered.map(([id, c]) => (
                   <TableRow
-                    key={String(c.donorId) + String(idx)}
-                    data-ocid={`collection.item.${idx + 1}`}
+                    key={String(id)}
+                    data-ocid={`collection.item.${String(id)}`}
                   >
                     <TableCell className="font-medium">
-                      {donorMap.get(Number(c.donorId)) ??
+                      {donorMap.get(String(c.donorId)) ??
                         `Donor #${Number(c.donorId)}`}
                     </TableCell>
                     <TableCell>{formatDate(c.collectionTimestamp)}</TableCell>
@@ -332,10 +328,10 @@ export function CollectionsPage() {
                         size="icon"
                         className="w-7 h-7"
                         onClick={() => {
-                          setEditTarget({ id: BigInt(idx), collection: c });
+                          setEditTarget({ id, collection: c });
                           setEditForm({ ...c });
                         }}
-                        data-ocid={`collection.edit_button.${idx + 1}`}
+                        data-ocid={`collection.edit_button.${String(id)}`}
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
@@ -347,7 +343,6 @@ export function CollectionsPage() {
           )}
         </CardContent>
       </Card>
-
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent data-ocid="collection.add.dialog">
           <DialogHeader>
@@ -362,7 +357,6 @@ export function CollectionsPage() {
           />
         </DialogContent>
       </Dialog>
-
       <Dialog
         open={!!editTarget}
         onOpenChange={(o) => !o && setEditTarget(null)}

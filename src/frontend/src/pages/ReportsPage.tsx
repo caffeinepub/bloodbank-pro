@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BarChart2, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { useMemo } from "react";
 import { AppLayout } from "../components/AppLayout";
 import { BloodGroupBadge } from "../components/BloodGroupBadge";
@@ -22,7 +22,7 @@ import {
   usePatients,
   useRequests,
 } from "../hooks/useQueries";
-import { ALL_BLOOD_GROUPS, BG_DISPLAY } from "../utils/blood";
+import { ALL_BLOOD_GROUPS } from "../utils/blood";
 
 function SectionCard({
   title,
@@ -39,59 +39,55 @@ function SectionCard({
 }
 
 export function ReportsPage() {
-  const { data: inventory = [], isLoading: invLoading } = useInventory();
-  const { data: donors = [], isLoading: donLoading } = useDonors();
-  const { data: collections = [], isLoading: colLoading } = useCollections();
-  const { data: requests = [], isLoading: reqLoading } = useRequests();
-  const { data: patients = [], isLoading: patLoading } = usePatients();
+  const { data: inventoryRows = [], isLoading: invLoading } = useInventory();
+  const { data: donorRows = [], isLoading: donLoading } = useDonors();
+  const { data: collectionRows = [], isLoading: colLoading } = useCollections();
+  const { data: requestRows = [], isLoading: reqLoading } = useRequests();
+  const { data: patientRows = [], isLoading: patLoading } = usePatients();
 
   const isLoading =
     invLoading || donLoading || colLoading || reqLoading || patLoading;
 
-  // Inventory by blood group (available units)
   const invByBg = useMemo(() => {
     const m = new Map<string, number>();
-    for (const u of inventory) {
-      if (u.status === "available") {
-        const key = u.bloodGroup;
-        m.set(key, (m.get(key) ?? 0) + Number(u.units));
-      }
+    for (const [, u] of inventoryRows) {
+      if (u.status === "available")
+        m.set(u.bloodGroup, (m.get(u.bloodGroup) ?? 0) + Number(u.units));
     }
     return m;
-  }, [inventory]);
+  }, [inventoryRows]);
 
-  // Collections stats
   const colStats = useMemo(
     () => ({
-      total: collections.length,
-      passed: collections.filter((c) => c.testStatus === "passed").length,
-      failed: collections.filter((c) => c.testStatus === "failed").length,
-      pending: collections.filter((c) => c.testStatus === "pending").length,
-      totalVol: collections.reduce((a, c) => a + Number(c.volumeMl), 0),
+      total: collectionRows.length,
+      passed: collectionRows.filter(([, c]) => c.testStatus === "passed")
+        .length,
+      failed: collectionRows.filter(([, c]) => c.testStatus === "failed")
+        .length,
+      pending: collectionRows.filter(([, c]) => c.testStatus === "pending")
+        .length,
+      totalVol: collectionRows.reduce((a, [, c]) => a + Number(c.volumeMl), 0),
     }),
-    [collections],
+    [collectionRows],
   );
 
-  // Request stats
   const reqStats = useMemo(
     () => ({
-      total: requests.length,
-      pending: requests.filter((r) => r.status === "pending").length,
-      approved: requests.filter((r) => r.status === "approved").length,
-      fulfilled: requests.filter((r) => r.status === "fulfilled").length,
-      rejected: requests.filter((r) => r.status === "rejected").length,
+      total: requestRows.length,
+      pending: requestRows.filter(([, r]) => r.status === "pending").length,
+      approved: requestRows.filter(([, r]) => r.status === "approved").length,
+      fulfilled: requestRows.filter(([, r]) => r.status === "fulfilled").length,
+      rejected: requestRows.filter(([, r]) => r.status === "rejected").length,
     }),
-    [requests],
+    [requestRows],
   );
 
-  // Donor stats by blood group
   const donByBg = useMemo(() => {
     const m = new Map<string, number>();
-    for (const d of donors) {
+    for (const [, d] of donorRows)
       m.set(d.bloodGroup, (m.get(d.bloodGroup) ?? 0) + 1);
-    }
     return m;
-  }, [donors]);
+  }, [donorRows]);
 
   return (
     <AppLayout pageTitle="Reports">
@@ -111,7 +107,6 @@ export function ReportsPage() {
           </Button>
         }
       />
-
       {isLoading ? (
         <div className="space-y-5">
           {[1, 2, 3, 4].map((i) => (
@@ -120,13 +115,12 @@ export function ReportsPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {/* Summary banner */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
-              { label: "Total Donors", val: donors.length },
-              { label: "Total Patients", val: patients.length },
-              { label: "Total Collections", val: collections.length },
-              { label: "Total Requests", val: requests.length },
+              { label: "Total Donors", val: donorRows.length },
+              { label: "Total Patients", val: patientRows.length },
+              { label: "Total Collections", val: collectionRows.length },
+              { label: "Total Requests", val: requestRows.length },
               {
                 label: "Blood Units Available",
                 val: Array.from(invByBg.values()).reduce((a, b) => a + b, 0),
@@ -142,8 +136,6 @@ export function ReportsPage() {
               </Card>
             ))}
           </div>
-
-          {/* Inventory by blood group */}
           <SectionCard title="🩸 Blood Inventory by Group">
             <Table data-ocid="reports.inventory.table">
               <TableHeader>
@@ -157,7 +149,7 @@ export function ReportsPage() {
               <TableBody>
                 {ALL_BLOOD_GROUPS.map((bg, idx) => {
                   const avail = invByBg.get(bg) ?? 0;
-                  const donors2 = donByBg.get(bg) ?? 0;
+                  const dCount = donByBg.get(bg) ?? 0;
                   return (
                     <TableRow
                       key={bg}
@@ -167,16 +159,10 @@ export function ReportsPage() {
                         <BloodGroupBadge bloodGroup={bg} />
                       </TableCell>
                       <TableCell className="font-semibold">{avail}</TableCell>
-                      <TableCell>{donors2}</TableCell>
+                      <TableCell>{dCount}</TableCell>
                       <TableCell>
                         <span
-                          className={`text-xs font-semibold ${
-                            avail === 0
-                              ? "text-destructive"
-                              : avail < 5
-                                ? "text-warning-foreground"
-                                : "text-success-foreground"
-                          }`}
+                          className={`text-xs font-semibold ${avail === 0 ? "text-destructive" : avail < 5 ? "text-warning-foreground" : "text-success-foreground"}`}
                         >
                           {avail === 0 ? "Critical" : avail < 5 ? "Low" : "OK"}
                         </span>
@@ -187,9 +173,7 @@ export function ReportsPage() {
               </TableBody>
             </Table>
           </SectionCard>
-
           <div className="grid md:grid-cols-2 gap-5">
-            {/* Collection stats */}
             <SectionCard title="😊 Donation Statistics">
               <div className="space-y-3">
                 {[
@@ -231,8 +215,6 @@ export function ReportsPage() {
                 ))}
               </div>
             </SectionCard>
-
-            {/* Request stats */}
             <SectionCard title="📌 Request Statistics">
               <div className="space-y-3">
                 {[
@@ -275,12 +257,10 @@ export function ReportsPage() {
               </div>
             </SectionCard>
           </div>
-
-          {/* Footer */}
           <Separator />
           <p className="text-xs text-muted-foreground text-center pb-2">
-            Report generated on {new Date().toLocaleString()} &mdash; LifeLine
-            Blood Bank Management System
+            Report generated on {new Date().toLocaleString()} &mdash; BloodBank
+            Pro Management System
           </p>
         </div>
       )}
